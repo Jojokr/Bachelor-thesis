@@ -1,0 +1,412 @@
+library(tidyverse)
+
+###FAECAL SAMPLES
+
+FEC_18_19_21 <- read.csv("https://raw.githubusercontent.com/derele/Mouse_Eimeria_Field/master/data_products/qPCR_faeces_field_eimeria_22.csv")
+
+##adapting data to right format
+
+colnames(FEC_18_19_21)[colnames(FEC_18_19_21)%in%"Sample"] <-"Mouse_ID"
+
+colnames(FEC_18_19_21)[colnames(FEC_18_19_21)%in%"Cq.Mean"]<-"FEC_Eim_Ct"
+
+FEC_18_19_21$Mouse_ID <- paste0("AA_",
+                                sprintf("%04d",
+                                        as.integer(gsub("AA", "", FEC_18_19_21$Mouse_ID))))
+
+##selecting right TM 
+
+ggplot(data=FEC_18_19_21,aes(x=Tm1,y=stat(density)))+
+  geom_histogram(binwidth=0.1,fill="black")+
+  geom_density(col="red")+
+  geom_vline(xintercept =73.5,col="darkolivegreen3",size=0.5)+
+  geom_vline(xintercept=76,col="darkolivegreen3",size=0.5)+
+  labs(title= NULL,subtitle="a",x="Tm1 in °C",y="Density")+
+  theme(plot.title=element_text(hjust=0.0))+
+  theme(axis.text.x=element_text(size=8))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  scale_x_continuous(breaks=seq(62,93,1.0))
+
+##specifying infected samples
+
+FEC_18_19_21$Tmcorrect <- if_else(between(FEC_18_19_21$Tm1,73.5,76), TRUE, FALSE)
+
+FEC_18_19_21 <- FEC_18_19_21 %>%
+  group_by(Mouse_ID)%>%
+  mutate(MC.Eimeria.FEC = sum(Tmcorrect)>=3)
+
+##removing doubled rows
+
+qPCR_mouse <- FEC_18_19_21 %>%
+  dplyr::select(c(Mouse_ID, FEC_Eim_Ct, Cq.SD, MC.Eimeria.FEC)) %>%
+  unique()
+
+
+##merging with SOTA
+
+SOTA <- read.csv("https://raw.githubusercontent.com/derele/Mouse_Eimeria_Field/master/data_products/SOTA_Data_Product.csv")
+
+### außerdem gibt es AA_0822 2 mal! Bitte Nachschauen wo es zu dem
+### Fehler kommt!
+
+allData <- merge(SOTA, qPCR_mouse, by="Mouse_ID")
+
+colnames(allData)
+
+###CEWE data
+
+CEWE_18_19_21<-read.csv("https://raw.githubusercontent.com/derele/Mouse_Eimeria_Field/master/data_products/qPCR_CEWE_eimeria_21_22.csv")
+CEWE_2021<-read.csv("https://raw.githubusercontent.com/derele/Mouse_Eimeria_Field/master/data_products/HZ21_CEWE_EqPCR_DataProduct.csv")
+
+##correcting columns
+
+colnames(CEWE_18_19_21)[colnames(CEWE_18_19_21)%in%"Sample"] <-"Mouse_ID"
+
+colnames(CEWE_18_19_21)[colnames(CEWE_18_19_21)%in%"Cq.Mean"] <-"Ct.Eimeria"
+
+CEWE_18_19_21<-CEWE_18_19_21 %>% 
+  filter(!str_detect(Mouse_ID, 'M'))
+
+CEWE_18_19_21<-CEWE_18_19_21 %>% 
+  filter(!str_detect(Mouse_ID, 'NTCE'))
+
+CEWE_18_19_21<-CEWE_18_19_21 %>% 
+  filter(!str_detect(Mouse_ID, 'V10'))
+
+CEWE_18_19_21$Mouse_ID <- paste0("AA_",
+                                 sprintf("%04d",
+                                         as.integer(gsub("AA", "", CEWE_18_19_21$Mouse_ID))))
+
+##deciding right tm
+
+ggplot(data=CEWE_18_19_21,aes(x=Tm1,y=stat(density)))+
+  geom_histogram(binwidth=0.05,fill="black")+
+  geom_density(col="red")+
+  geom_vline(xintercept =73.5,col="darkolivegreen3",size=0.5)+
+  geom_vline(xintercept=76,col="darkolivegreen3",size=0.5)+
+  labs(title=NULL, subtitle = "b",x="Tm1 in °C", y="Density")+
+  theme(plot.title=element_text(hjust=0.0))+
+  theme(axis.text.x=element_text(size=8))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  scale_x_continuous(breaks=seq(72,100,0.5))
+
+##specifying infected samples
+
+
+CEWE_18_19_21$Tmcorrect <- if_else(between(CEWE_18_19_21$Tm1,73.5,76), TRUE, FALSE)
+
+CEWE_18_19_21 <- CEWE_18_19_21 %>%
+  group_by(Mouse_ID)%>%
+  mutate(MC.Eimeria = sum(Tmcorrect)>=3)
+
+##removing doubled rows
+
+qPCR_mouse_CEWE <- CEWE_18_19_21 %>%
+  dplyr::select(c(Mouse_ID, Ct.Eimeria, MC.Eimeria)) %>%
+  unique()
+
+colnames(qPCR_mouse_CEWE)
+##merging with SOTA
+
+alldata_CEWE <- merge(allData, qPCR_mouse_CEWE, by="Mouse_ID",all.x = TRUE)
+
+alldata_CEWE<-alldata_CEWE%>%mutate(MC.Eimeria=coalesce(MC.Eimeria.x,MC.Eimeria.y))
+
+alldata_CEWE<-alldata_CEWE%>%mutate(Ct.Eimeria=coalesce(Ct.Eimeria.x,Ct.Eimeria.y))
+
+colnames(alldata_CEWE)
+alldata_CEWE<-alldata_CEWE%>%select(Mouse_ID,Year,MC.Eimeria,delta_ct_cewe_MminusE,FEC_Eim_Ct,OPG,MC.Eimeria.FEC)
+
+colnames(CEWE_2021)
+
+colnames(CEWE_2021)[colnames(CEWE_2021)%in%"Ct_Mean_Eim"] <-"Ct.Eimeria"
+
+CEWE_2021<-CEWE_2021%>%select(Mouse_ID,delta_ct_cewe_MminusE,Ct.Eimeria)
+
+
+alldata_CEWE<-merge(alldata_CEWE,CEWE_2021,by="Mouse_ID",all.x=TRUE)
+
+colnames(alldata_CEWE)
+
+alldata_CEWE<-alldata_CEWE%>%mutate(delta_ct_cewe_MminusE=coalesce(delta_ct_cewe_MminusE.x,delta_ct_cewe_MminusE.y))
+
+### sorting out interesting years 2018,2019,2021
+
+colnames(alldata_CEWE)
+
+alldata18_19_21<-alldata_CEWE%>%select(Mouse_ID,Year,FEC_Eim_Ct,MC.Eimeria.FEC,delta_ct_cewe_MminusE,MC.Eimeria,OPG)%>%
+  filter(Year=="2018"|Year=="2019"|Year=="2021")
+
+
+##paste both MC into one column
+colnames(alldata18_19_21)
+alldata18_19_21<-alldata18_19_21%>%mutate(MCs=case_when(MC.Eimeria.FEC==TRUE& MC.Eimeria==TRUE~'Fec:TRUE Tissue:TRUE',
+                                                        MC.Eimeria.FEC==TRUE& MC.Eimeria==FALSE~'Fec:TRUE Tissue:FALSE',
+                                                        MC.Eimeria.FEC==TRUE& is.na(MC.Eimeria)~'Fec:TRUE Tissue:NA',
+                                                        MC.Eimeria.FEC==FALSE& MC.Eimeria==TRUE~'Fec:FALSE Tissue:TRUE',
+                                                        MC.Eimeria.FEC==FALSE& MC.Eimeria==FALSE~'Fec:FALSE Tissue:FALSE',
+                                                        MC.Eimeria.FEC==FALSE& is.na(MC.Eimeria)~'Fec:FALSE Tissue:NA',
+                                                        is.na(MC.Eimeria.FEC)& MC.Eimeria==TRUE~'Fec:NA Tissue:TRUE',
+                                                        is.na(MC.Eimeria.FEC)&MC.Eimeria==FALSE~'Fec:NA Tissue:FALSE',
+                                                        is.na(MC.Eimeria.FEC)&is.na(MC.Eimeria)~"Fec:NA Tissue:NA"))
+
+##removing doubled IDs by combining rows
+
+alldata18_19_21[!duplicated(alldata18_19_21$Mouse_ID),]->alldata18_19_21
+
+alldata18_19_21$FEC_Eim_Ct[alldata18_19_21$Mouse_ID%in%"AA_0538"]<-"35.35597"
+
+alldata18_19_21$FEC_Eim_Ct[alldata18_19_21$Mouse_ID%in%"AA_0814"]<-"27.57534"
+
+
+##how many infected due to fecal samples?
+nrow(alldata18_19_21[alldata18_19_21$MC.Eimeria.FEC=="TRUE",])
+
+##how many infected due to tissue sample?
+
+nrow(alldata18_19_21[alldata18_19_21$MC.Eimeria=="TRUE",])
+
+###Plot CqMean Faeces qPCR and delta CT CEWE
+
+class(alldata18_19_21$FEC_Eim_Ct)
+
+alldata18_19_21$FEC_Eim_Ct<-as.numeric(alldata18_19_21$FEC_Eim_Ct)
+
+ggplot(data=alldata18_19_21, mapping = aes(x=FEC_Eim_Ct,y=delta_ct_cewe_MminusE,col=MCs,size=log(OPG+1)))+
+  geom_point()+
+  scale_size(range=c(0.5,3))+
+  geom_smooth(method="lm", size=0.5,se=TRUE)+
+  theme(axis.title.x = element_text(size=10))+
+  theme(axis.title.y = element_text(size = 10))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(legend.spacing.y = unit(0.05,"cm"))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  labs(x="Ct from qPCR with faecal DNA",y="deltaCt from qPCR with tissue DNA",color="Infected",size="log(OPG)")+
+  guides(color=guide_legend(override.aes = list(size=2)))
+
+
+ggplot(data=alldata18_19_21,mapping=aes(x=delta_ct_cewe_MminusE,y=FEC_Eim_Ct,col=MCs,size=log(OPG+1)))+
+  geom_point()+
+  scale_size(range=c(0.5,3))+
+  geom_smooth(method="lm", size=0.5,se=TRUE)+
+  theme(axis.title.x = element_text(size=10))+
+  theme(axis.title.y = element_text(size = 10))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(legend.spacing.y = unit(0.05,"cm"))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  labs(x="delta Ct from qPCR with tissue DNA",y="Ct from qPCR with faecal DNA",color="Infected",size="log(OPG)")+
+  guides(color=guide_legend(override.aes = list(size=2)))
+
+###prediction of amount of oocyst equivalents FEC
+
+Standard_curve<-read.csv("https://raw.githubusercontent.com/derele/Mouse_Eimeria_Field/master/data_products/HZ21_CEWE_EqPCR_SC.csv")
+
+## bringing standard curve into right format
+colnames(Standard_curve)[colnames(Standard_curve)%in%"Ct_Mean_Eim"] <-"FEC_Eim_Ct"
+
+colnames(Standard_curve)[colnames(Standard_curve)%in%"Mouse_ID"] <-"Oocysts"
+
+Standard_curve$Oocysts[Standard_curve$Oocysts%in%c("V10_0","V10_1","V10_2","V10_3","V10_4","V10_5","V10_6")]<-c("0","1","2","3","4","5","6")
+
+
+Standard_curve<- Standard_curve%>%filter(Standard_curve$FEC_Eim_Ct>0)
+
+
+Eimeria_detection<-alldata18_19_21
+
+##design a linear model
+class(Standard_curve$Oocysts)
+
+Standard_curve$Oocysts<-as.numeric(Standard_curve$Oocysts)
+
+Eimeria_detection_FEC<-Eimeria_detection%>%select(Mouse_ID,FEC_Eim_Ct)
+
+Linear_model<-lm(Oocysts~FEC_Eim_Ct,data=Standard_curve)
+
+##prediction
+class(Eimeria_detection_FEC$FEC_Eim_Ct)
+class(Standard_curve$FEC_Eim_Ct)
+Eimeria_detection_FEC$FEC_Eim_Ct<-as.numeric(Eimeria_detection_FEC$FEC_Eim_Ct)
+
+Oocysts_Predict_Eimeria_FEC<-10^predict(Linear_model,newdata=Eimeria_detection_FEC)
+
+Eimeria_detection_FEC<-data.frame(Eimeria_detection_FEC,Oocysts_Predict_Eimeria_FEC)
+
+###prediction of amount of oocyst equivalents tissue
+
+Standard_curve2<-read.csv("https://raw.githubusercontent.com/derele/Mouse_Eimeria_Field/master/data_products/HZ21_CEWE_EqPCR_SC.csv")
+
+## bringing standard curve into right format
+colnames(Standard_curve2)[colnames(Standard_curve2)%in%"Ct_Mean_Eim"] <-"delta_ct_cewe_MminusE"
+
+colnames(Standard_curve2)[colnames(Standard_curve2)%in%"Mouse_ID"] <-"Oocysts"
+
+Standard_curve2$Oocysts[Standard_curve2$Oocysts%in%c("V10_0","V10_1","V10_2","V10_3","V10_4","V10_5","V10_6")]<-c("0","1","2","3","4","5","6")
+
+
+Standard_curve2<- Standard_curve2%>%filter(Standard_curve2$delta_ct_cewe_MminusE>0)
+
+##design a linear model
+
+class(Standard_curve2$Oocysts)
+
+Standard_curve2$Oocysts<-as.numeric(Standard_curve2$Oocysts)
+
+Eimeria_detection_CEWE<-Eimeria_detection%>%select(Mouse_ID,delta_ct_cewe_MminusE)
+
+Linear_model2<-lm(Oocysts~delta_ct_cewe_MminusE,data=Standard_curve2)
+
+
+##prediction
+
+Oocysts_Predict_Eimeria_CEWE<-10^predict(Linear_model2,newdata=Eimeria_detection_CEWE)
+
+Eimeria_detection_CEWE<-data.frame(Eimeria_detection_CEWE,Oocysts_Predict_Eimeria_CEWE)
+
+### merging both predictions together
+
+Oocyst_Predict<-merge(Eimeria_detection_FEC,Eimeria_detection_CEWE,by="Mouse_ID",all.x = TRUE)
+
+Oocyst_Predict<-na.omit(Oocyst_Predict)
+
+Oocyst_Predict<-distinct(Oocyst_Predict)
+
+##removing not needed dataframes
+
+rm(Eimeria_detection)
+rm(Eimeria_detection_CEWE)
+rm(Eimeria_detection_FEC)
+rm(Standard_curve)
+rm(Standard_curve2)
+
+## removing not needed non dataframes
+
+rm(Oocysts_Predict_Eimeria_CEWE)
+rm(Oocysts_Predict_Eimeria_FEC)
+
+
+### plotting predicted oocysts against opgs
+
+## merging Oocyst predict with alldata18_19_21
+colnames(Oocyst_Predict)
+
+Oocyst_Predict<-Oocyst_Predict%>%select(Mouse_ID,Oocysts_Predict_Eimeria_FEC,Oocysts_Predict_Eimeria_CEWE)
+
+alldata_18_19_21<-merge(alldata18_19_21,Oocyst_Predict,all.x = TRUE)
+
+alldata_18_19_21<-alldata_18_19_21%>%unique()
+colnames(alldata_18_19_21)
+
+## sending oocyst predict to Finn
+
+Oocyst_Predict%>%write.csv("Oocyst_Predict.csv")
+
+alldata_18_19_21<-alldata_18_19_21%>%select(Mouse_ID,Year,FEC_Eim_Ct,MC.Eimeria.FEC,Oocysts_Predict_Eimeria_FEC,delta_ct_cewe_MminusE,MC.Eimeria,Oocysts_Predict_Eimeria_CEWE,OPG,MCs)
+library(xlsx)
+
+write.xlsx(alldata_18_19_21,file="alldata_18_19_21.xlsx")
+
+##setting all MC_Eim_FEC FALSE as 0
+
+alldata_18_19_21$Oocysts_Predict_Eimeria_FEC[alldata_18_19_21$MC.Eimeria.FEC=="FALSE"]<-0
+
+## removing double rows
+
+alldata_18_19_21[!duplicated(alldata_18_19_21$Mouse_ID),]->alldata_18_19_21
+
+##plot
+
+ggplot(data=alldata_18_19_21,mapping=aes(x=log10(OPG),y=log10(Oocysts_Predict_Eimeria_FEC),col=MCs))+
+  geom_point()+
+  geom_smooth(method="lm", size=0.5,col="black",se=TRUE)+
+  theme(axis.title.x = element_text(size=10))+
+  theme(axis.title.y = element_text(size = 10))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(legend.spacing.y = unit(0.05,"cm"))+
+  theme(legend.background = element_blank())+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  labs(x="counted oocysts (OPG's)",y="predicted Oocysts from ct")+
+  guides(color=guide_legend(override.aes = list(size=2)))
+
+ggplot(data=alldata_18_19_21,mapping=aes(x=log10(Oocysts_Predict_Eimeria_FEC),y=log10(OPG),))+
+  geom_point(col="forestgreen")+
+  scale_size(range=c(0.5,3))+
+  geom_smooth(method="lm", size=0.5,col="black",se=TRUE)+
+  theme(axis.title.x = element_text(size=10))+
+  theme(axis.title.y = element_text(size = 10))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(legend.spacing.y = unit(0.05,"cm"))+
+  theme(legend.background = element_blank())+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  guides(color=guide_legend(override.aes = list(size=2)))
+
+## check which oocyst predict 0 have oocysts
+
+predicted_zero<-alldata_18_19_21%>%select(Mouse_ID,Oocysts_Predict_Eimeria_FEC,OPG,FEC_Eim_Ct)
+
+predicted_zero<-predicted_zero%>%filter(Oocysts_Predict_Eimeria_FEC==0&OPG>0)
+
+predicted_zero<-predicted_zero%>%unique()
+
+Tm1<-FEC_18_19_21%>%select(Mouse_ID,Tm1)
+
+predicted_zero<-merge(Tm1,predicted_zero)
+
+### Check residuals of counted oocysts and predicted oocysts
+rownames(alldata_18_19_21)<-make.unique(alldata_18_19_21$Mouse_ID)
+
+Residual_model<-lm(formula=Oocysts_Predict_Eimeria_FEC~OPG,data=alldata_18_19_21)
+
+
+Predicted<-predict(Residual_model,newdata=alldata_18_19_21)
+
+RES<-residuals(Residual_model,newdata=alldata_18_19_21)
+
+alldata_18_19_21<-data.frame(alldata_18_19_21,Predicted)
+
+intersect(rownames(alldata_18_19_21),rownames(data.frame(RES)))
+
+alldata_18_19_21<-merge(alldata_18_19_21,data.frame(RES),by=0)
+
+plot(RES~Oocysts_Predict_Eimeria_FEC,data=alldata_18_19_21)
+
+ggplot(data=alldata_18_19_21, aes(x=OPG,y=Oocysts_Predict_Eimeria_FEC))+
+  geom_smooth(method="lm",se=F,col="black",size=0.5)+
+  geom_point(aes(color=abs(Oocysts_Predict_Eimeria_CEWE),size=abs(RES)))+
+  scale_size(range=c(1,5))+
+  scale_color_continuous(low="indianred2",high="indianred4")+
+  labs(x="Counted oocysts(OPG's)",y="Predicted genome equivalents faeces",color="Predicted genome equivaltents tissue",size="Residuals")+
+  guides(color=guide_legend(override.aes=list(size=3)))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  theme(legend.spacing.y = unit(0.05,"cm"))
+ 
+ggplot(data=alldata_18_19_21, aes(x=Oocysts_Predict_Eimeria_FEC,y=RES))+
+  geom_smooth(method="lm",se=F,col="black",size=0.5)+
+  geom_point(aes(color=abs(Oocysts_Predict_Eimeria_CEWE),size=abs(RES)))+
+  scale_size(range=c(1,5))+
+  scale_color_continuous(low="indianred2",high="indianred4")+
+  labs(x="Predicted genome equivalents faeces",y="Residuals",color="Predicted genome equivaltents tissue",size="Residuals")+
+  guides(color=guide_legend(override.aes=list(size=3)))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  theme(legend.spacing.y = unit(0.05,"cm"))
+
+ggplot(data=alldata_18_19_21, aes(x=OPG,y=Oocysts_Predict_Eimeria_FEC))+
+  geom_smooth(method="lm",se=F,col="black",size=0.5)+
+  geom_point(aes(color=abs(Oocysts_Predict_Eimeria_CEWE),size=abs(RES)))+
+  geom_segment(aes(xend=OPG,yend=Predicted),alpha=0.3,col="gray70")+
+  scale_size(range=c(1,5))+
+  scale_color_continuous(low="indianred2",high="indianred4")+
+  labs(x="Counted oocysts (OPG's)",y="Predicted genome equivalents faeces",color="Predicted genome equivaltents tissue",size="Residuals")+
+  guides(color=guide_legend(override.aes=list(size=3)))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  theme(legend.spacing.y = unit(0.05,"cm"))
