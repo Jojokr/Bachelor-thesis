@@ -10,9 +10,14 @@ colnames(FEC_18_19_21)[colnames(FEC_18_19_21)%in%"Sample"] <-"Mouse_ID"
 
 colnames(FEC_18_19_21)[colnames(FEC_18_19_21)%in%"Cq.Mean"]<-"FEC_Eim_Ct"
 
+FEC_18_19_21<-FEC_18_19_21[FEC_18_19_21$Mouse_ID != "AA822",]
+
+FEC_18_19_21$Mouse_ID[FEC_18_19_21$Mouse_ID%in%"AA822.2"]<-"AA822"
+
 FEC_18_19_21$Mouse_ID <- paste0("AA_",
                                 sprintf("%04d",
                                         as.integer(gsub("AA", "", FEC_18_19_21$Mouse_ID))))
+
 
 ##selecting right TM 
 
@@ -46,8 +51,6 @@ qPCR_mouse <- FEC_18_19_21 %>%
 
 SOTA <- read.csv("https://raw.githubusercontent.com/derele/Mouse_Eimeria_Field/master/data_products/SOTA_Data_Product.csv")
 
-### außerdem gibt es AA_0822 2 mal! Bitte Nachschauen wo es zu dem
-### Fehler kommt!
 
 allData <- merge(SOTA, qPCR_mouse, by="Mouse_ID")
 
@@ -105,10 +108,12 @@ qPCR_mouse_CEWE <- CEWE_18_19_21 %>%
   dplyr::select(c(Mouse_ID, Ct.Eimeria, MC.Eimeria)) %>%
   unique()
 
+qPCR_mouse_CEWE[!duplicated(qPCR_mouse_CEWE$Mouse_ID),]->qPCR_mouse_CEWE
+
 colnames(qPCR_mouse_CEWE)
 ##merging with SOTA
 
-alldata_CEWE <- merge(allData, qPCR_mouse_CEWE, by="Mouse_ID",all.x = TRUE)
+alldata_CEWE <- merge(allData, qPCR_mouse_CEWE, by="Mouse_ID", all = TRUE)
 
 alldata_CEWE<-alldata_CEWE%>%mutate(MC.Eimeria=coalesce(MC.Eimeria.x,MC.Eimeria.y))
 
@@ -124,7 +129,7 @@ colnames(CEWE_2021)[colnames(CEWE_2021)%in%"Ct_Mean_Eim"] <-"Ct.Eimeria"
 CEWE_2021<-CEWE_2021%>%select(Mouse_ID,delta_ct_cewe_MminusE,Ct.Eimeria)
 
 
-alldata_CEWE<-merge(alldata_CEWE,CEWE_2021,by="Mouse_ID",all.x=TRUE)
+alldata_CEWE<-merge(alldata_CEWE,CEWE_2021,by="Mouse_ID",all=TRUE)
 
 colnames(alldata_CEWE)
 
@@ -134,8 +139,10 @@ alldata_CEWE<-alldata_CEWE%>%mutate(delta_ct_cewe_MminusE=coalesce(delta_ct_cewe
 
 colnames(alldata_CEWE)
 
-alldata18_19_21<-alldata_CEWE%>%select(Mouse_ID,Year,FEC_Eim_Ct,MC.Eimeria.FEC,delta_ct_cewe_MminusE,MC.Eimeria,OPG)%>%
-  filter(Year=="2018"|Year=="2019"|Year=="2021")
+
+
+alldata18_19_21<-alldata_CEWE%>%select(Mouse_ID,Year,FEC_Eim_Ct,MC.Eimeria.FEC,delta_ct_cewe_MminusE,MC.Eimeria,OPG)
+  
 
 
 ##paste both MC into one column
@@ -267,11 +274,12 @@ Eimeria_detection_CEWE<-data.frame(Eimeria_detection_CEWE,Oocysts_Predict_Eimeri
 
 ### merging both predictions together
 
-Oocyst_Predict<-merge(Eimeria_detection_FEC,Eimeria_detection_CEWE,by="Mouse_ID",all.x = TRUE)
+Oocyst_Predict<-merge(Eimeria_detection_FEC,Eimeria_detection_CEWE,by="Mouse_ID",all = TRUE)
+
+sum(duplicated(Oocyst_Predict$Mouse_ID))
 
 Oocyst_Predict<-na.omit(Oocyst_Predict)
 
-Oocyst_Predict<-distinct(Oocyst_Predict)
 
 ##removing not needed dataframes
 
@@ -294,9 +302,8 @@ colnames(Oocyst_Predict)
 
 Oocyst_Predict<-Oocyst_Predict%>%select(Mouse_ID,Oocysts_Predict_Eimeria_FEC,Oocysts_Predict_Eimeria_CEWE)
 
-alldata_18_19_21<-merge(alldata18_19_21,Oocyst_Predict,all.x = TRUE)
+alldata_18_19_21<-merge(alldata18_19_21,Oocyst_Predict,all = TRUE)
 
-alldata_18_19_21<-alldata_18_19_21%>%unique()
 colnames(alldata_18_19_21)
 
 ## sending oocyst predict to Finn
@@ -312,10 +319,6 @@ write.xlsx(alldata_18_19_21,file="alldata_18_19_21.xlsx")
 
 alldata_18_19_21$Oocysts_Predict_Eimeria_FEC[alldata_18_19_21$MC.Eimeria.FEC=="FALSE"]<-0
 
-## removing double rows
-
-alldata_18_19_21[!duplicated(alldata_18_19_21$Mouse_ID),]->alldata_18_19_21
-
 ##plot
 
 ggplot(data=alldata_18_19_21,mapping=aes(x=log10(OPG),y=log10(Oocysts_Predict_Eimeria_FEC),col=MCs))+
@@ -328,7 +331,7 @@ ggplot(data=alldata_18_19_21,mapping=aes(x=log10(OPG),y=log10(Oocysts_Predict_Ei
   theme(legend.spacing.y = unit(0.05,"cm"))+
   theme(legend.background = element_blank())+
   theme(panel.background=element_rect(fill="gray95",color="gray40"))+
-  labs(x="counted oocysts (OPG's)",y="predicted Oocysts from ct")+
+  labs(title=NULL,subtitle="a",x="counted oocysts (OPG's)",y="predicted Oocysts from ct")+
   guides(color=guide_legend(override.aes = list(size=2)))
 
 ggplot(data=alldata_18_19_21,mapping=aes(x=log10(Oocysts_Predict_Eimeria_FEC),y=log10(OPG),))+
@@ -357,10 +360,18 @@ Tm1<-FEC_18_19_21%>%select(Mouse_ID,Tm1)
 predicted_zero<-merge(Tm1,predicted_zero)
 
 ### Check residuals of counted oocysts and predicted oocysts
+
+sum(is.na(alldata_18_19_21$Oocysts_Predict_Eimeria_FEC))
+
+sum(is.na(alldata_18_19_21$OPG))
+
+alldata_18_19_21$OPG[is.na(alldata_18_19_21$OPG)]<-0
+
+alldata_18_19_21$Oocysts_Predict_Eimeria_FEC[is.na(alldata_18_19_21$Oocysts_Predict_Eimeria_FEC)]<-0
+
 rownames(alldata_18_19_21)<-make.unique(alldata_18_19_21$Mouse_ID)
 
 Residual_model<-lm(formula=Oocysts_Predict_Eimeria_FEC~OPG,data=alldata_18_19_21)
-
 
 Predicted<-predict(Residual_model,newdata=alldata_18_19_21)
 
@@ -368,30 +379,16 @@ RES<-residuals(Residual_model,newdata=alldata_18_19_21)
 
 alldata_18_19_21<-data.frame(alldata_18_19_21,Predicted)
 
-intersect(rownames(alldata_18_19_21),rownames(data.frame(RES)))
-
-alldata_18_19_21<-merge(alldata_18_19_21,data.frame(RES),by=0)
+alldata_18_19_21<-merge(alldata_18_19_21,data.frame(RES),by=0,)
 
 plot(RES~Oocysts_Predict_Eimeria_FEC,data=alldata_18_19_21)
 
-ggplot(data=alldata_18_19_21, aes(x=OPG,y=Oocysts_Predict_Eimeria_FEC))+
+ggplot(data=alldata_18_19_21, aes(x=OPG,y=RES))+
   geom_smooth(method="lm",se=F,col="black",size=0.5)+
-  geom_point(aes(color=abs(Oocysts_Predict_Eimeria_CEWE),size=abs(RES)))+
+  geom_point(aes(color=abs(Oocysts_Predict_Eimeria_FEC),size=abs(RES)))+
   scale_size(range=c(1,5))+
   scale_color_continuous(low="indianred2",high="indianred4")+
-  labs(x="Counted oocysts(OPG's)",y="Predicted genome equivalents faeces",color="Predicted genome equivaltents tissue",size="Residuals")+
-  guides(color=guide_legend(override.aes=list(size=3)))+
-  theme(legend.text=element_text(size=7))+
-  theme(legend.title =element_text(size=9))+
-  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
-  theme(legend.spacing.y = unit(0.05,"cm"))
- 
-ggplot(data=alldata_18_19_21, aes(x=Oocysts_Predict_Eimeria_FEC,y=RES))+
-  geom_smooth(method="lm",se=F,col="black",size=0.5)+
-  geom_point(aes(color=abs(Oocysts_Predict_Eimeria_CEWE),size=abs(RES)))+
-  scale_size(range=c(1,5))+
-  scale_color_continuous(low="indianred2",high="indianred4")+
-  labs(x="Predicted genome equivalents faeces",y="Residuals",color="Predicted genome equivaltents tissue",size="Residuals")+
+  labs(title=NULL,subtitle="b",x="Counted oocysts(OPG's)",y="Residuals",color="Predicted genome equivaltents faeces",size="Residuals")+
   guides(color=guide_legend(override.aes=list(size=3)))+
   theme(legend.text=element_text(size=7))+
   theme(legend.title =element_text(size=9))+
@@ -401,7 +398,6 @@ ggplot(data=alldata_18_19_21, aes(x=Oocysts_Predict_Eimeria_FEC,y=RES))+
 ggplot(data=alldata_18_19_21, aes(x=OPG,y=Oocysts_Predict_Eimeria_FEC))+
   geom_smooth(method="lm",se=F,col="black",size=0.5)+
   geom_point(aes(color=abs(Oocysts_Predict_Eimeria_CEWE),size=abs(RES)))+
-  geom_segment(aes(xend=OPG,yend=Predicted),alpha=0.3,col="gray70")+
   scale_size(range=c(1,5))+
   scale_color_continuous(low="indianred2",high="indianred4")+
   labs(x="Counted oocysts (OPG's)",y="Predicted genome equivalents faeces",color="Predicted genome equivaltents tissue",size="Residuals")+
@@ -409,4 +405,17 @@ ggplot(data=alldata_18_19_21, aes(x=OPG,y=Oocysts_Predict_Eimeria_FEC))+
   theme(legend.text=element_text(size=7))+
   theme(legend.title =element_text(size=9))+
   theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  theme(legend.spacing.y = unit(0.05,"cm"))  
+
+ 
+ggplot(data=alldata_18_19_21, aes(x=Oocysts_Predict_Eimeria_FEC,y=RES))+
+  geom_smooth(method="lm",se=F,col="black",size=0.5)+
+  geom_point(aes(color=abs(Oocysts_Predict_Eimeria_CEWE),size=abs(RES)))+
+  scale_size(range=c(1,5))+
+  scale_color_continuous(low="indianred2",high="indianred4")+
+  guides(color=guide_legend(override.aes=list(size=3)))+
+  theme(legend.text=element_text(size=7))+
+  theme(legend.title =element_text(size=9))+
+  theme(panel.background=element_rect(fill="gray95",color="gray40"))+
+  labs(x="Predicted genome equivalents faeces",y="Residuals",color="Predicted genome equivaltents tissue",size="Residuals")+
   theme(legend.spacing.y = unit(0.05,"cm"))
